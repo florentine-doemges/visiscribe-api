@@ -1,0 +1,663 @@
+openapi: 3.0.3
+info:
+  title: Video Transcription & Analysis API
+  version: 1.0.0
+  description: API zum Hochladen, Analysieren und Durchsuchen von Videos, inklusive Nutzerverwaltung und Abrechnung.
+servers:
+  - url: https://api.example.com/api/v1
+    description: Produktionsserver
+  - url: https://staging.api.example.com/api/v1
+    description: Stagingserver
+
+paths:
+  /auth/register:
+    post:
+      summary: Registriert einen neuen Benutzer
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterUserRequest'
+      responses:
+        '201':
+          description: Benutzer erfolgreich angelegt
+        '400':
+          description: Ungültige Eingabe (z.B. E-Mail-Format)
+  
+  /auth/login:
+    post:
+      summary: Login für vorhandenen Benutzer
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginUserRequest'
+      responses:
+        '200':
+          description: Erfolgreicher Login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT oder Session-Token
+        '401':
+          description: Ungültige Zugangsdaten
+
+  /auth/me:
+    get:
+      summary: Ruft die Profilinformationen zum aktuellen Nutzer ab
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profilinformationen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Nicht autorisiert oder Token abgelaufen
+
+  /videos:
+    post:
+      summary: Lädt ein Video hoch
+      operationId: uploadVideo
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                title:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Video erfolgreich hochgeladen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoMetadata'
+
+  /videos/{videoId}:
+    get:
+      summary: Ruft Metadaten eines Videos ab
+      operationId: getVideo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Die ID des Videos
+      responses:
+        '200':
+          description: Metadaten des Videos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoMetadata'
+        '404':
+          description: Video nicht gefunden
+
+    delete:
+      summary: Verschiebt ein Video in den Papierkorb (Soft Delete)
+      operationId: softDeleteVideo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Die ID des Videos
+      responses:
+        '204':
+          description: Video wurde in den Papierkorb verschoben
+        '404':
+          description: Video nicht gefunden
+
+  /videos/{videoId}/restore:
+    post:
+      summary: Stellt ein Video aus dem Papierkorb wieder her
+      operationId: restoreVideo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Video wurde wiederhergestellt
+        '404':
+          description: Video existiert nicht oder ist nicht im Papierkorb
+
+  /videos/{videoId}/force:
+    delete:
+      summary: Löscht ein Video dauerhaft (Force Delete)
+      operationId: forceDeleteVideo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Video dauerhaft gelöscht
+        '404':
+          description: Video nicht gefunden
+
+  /videos/{videoId}/analysis:
+    post:
+      summary: Startet die Analyse eines Videos
+      operationId: startAnalysis
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartAnalysisRequest'
+      responses:
+        '201':
+          description: Analyse wurde gestartet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisStatus'
+        '402':
+          description: Nicht genügend Credits vorhanden
+        '403':
+          description: Abo inaktiv oder unzureichende Berechtigungen
+
+  /analysis/{analysisId}/status:
+    get:
+      summary: Abfrage des Status einer Analyse
+      operationId: getAnalysisStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Statusinformationen zur Analyse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisStatus'
+        '404':
+          description: Analyse nicht gefunden
+        '429':
+          description: Zu viele Anfragen in kurzer Zeit
+
+  /analysis/{analysisId}/partial:
+    get:
+      summary: Liefert (optionale) Zwischenergebnisse
+      operationId: getPartialAnalysisResult
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Zwischenergebnisse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartialAnalysisResults'
+        '404':
+          description: Analyse nicht gefunden
+        '429':
+          description: Zu viele Anfragen in kurzer Zeit
+
+  /analysis/{analysisId}/result:
+    get:
+      summary: Liefert das Endergebnis der Analyse
+      operationId: getAnalysisResult
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: analysisId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, pdf, txt]
+          description: Gewünschtes Ausgabeformat
+      responses:
+        '200':
+          description: Analyseergebnis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Analyse nicht gefunden
+        '429':
+          description: Zu viele Anfragen
+
+  /search:
+    get:
+      summary: Durchsucht analysierte Videos
+      operationId: searchAnalysis
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: videoId
+          in: query
+          schema:
+            type: string
+        - name: speaker
+          in: query
+          schema:
+            type: string
+        - name: dateRangeStart
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: dateRangeEnd
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Suchergebnisse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /billing/summary:
+    get:
+      summary: Abfrage von Credits und Abo-Informationen
+      operationId: getBillingSummary
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Zusammenfassung von Credits und Abo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingSummary'
+
+  /billing/purchase-credits:
+    post:
+      summary: Kauf von Credits
+      operationId: purchaseCredits
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseCreditsRequest'
+      responses:
+        '200':
+          description: Credits wurden erfolgreich hinzugefügt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseCreditsResponse'
+        '400':
+          description: Ungültige Eingabe oder Zahlungsmethode
+
+  /billing/subscribe:
+    post:
+      summary: Schließt oder ändert ein Abonnement ab
+      operationId: subscribePlan
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan:
+                  type: string
+                  example: Starter
+      responses:
+        '200':
+          description: Abo aktiviert oder gewechselt
+        '400':
+          description: Ungültige Eingabe (z.B. Plan unbekannt)
+
+  /billing/unsubscribe:
+    post:
+      summary: Kündigt das aktuelle Abonnement
+      operationId: unsubscribePlan
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Abo gekündigt
+        '404':
+          description: Kein aktives Abo gefunden
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ============== AUTH ==============
+    RegisterUserRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        name:
+          type: string
+
+    LoginUserRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    UserProfile:
+      type: object
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        currentCredits:
+          type: integer
+        subscriptionPlan:
+          type: string
+        subscriptionStatus:
+          type: string
+          enum: [active, expired, cancelled]
+
+    # ============== VIDEO ==============
+    VideoMetadata:
+      type: object
+      properties:
+        videoId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        uploadDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [uploaded, processing, completed, failed]
+        fileSize:
+          type: integer
+          nullable: true
+        inTrash:
+          type: boolean
+          nullable: true
+        trashDate:
+          type: string
+          format: date-time
+          nullable: true
+        analysisCount:
+          type: integer
+          nullable: true
+        lastAnalysisDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    # ============== ANALYSIS ==============
+    StartAnalysisRequest:
+      type: object
+      properties:
+        analyzeAudio:
+          type: boolean
+          default: true
+        analyzeVisual:
+          type: boolean
+          default: true
+        languageHint:
+          type: string
+          default: en-US
+        priority:
+          type: string
+          enum: [low, normal, high]
+          default: normal
+      required:
+        - analyzeAudio
+        - analyzeVisual
+
+    AnalysisStatus:
+      type: object
+      properties:
+        analysisId:
+          type: string
+        videoId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        queuePosition:
+          type: integer
+          nullable: true
+        estimatedTime:
+          type: string
+          format: date-time
+          nullable: true
+        results:
+          type: object
+          nullable: true
+
+    PartialAnalysisResults:
+      type: object
+      properties:
+        analysisId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        progress:
+          type: integer
+        partialResults:
+          type: object
+          properties:
+            audioTranscript:
+              type: string
+            visualDescriptions:
+              type: array
+              items:
+                type: object
+                properties:
+                  timestamp:
+                    type: string
+                  description:
+                    type: string
+
+    AnalysisResult:
+      type: object
+      properties:
+        analysisId:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        structuredScript:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+              audio:
+                type: string
+              description:
+                type: string
+
+    # ============== SUCHE ==============
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              videoId:
+                type: string
+              analysisId:
+                type: string
+              timestamp:
+                type: string
+              contentSnippet:
+                type: string
+        totalResults:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # ============== BILLING ==============
+    BillingSummary:
+      type: object
+      properties:
+        credits:
+          type: object
+          properties:
+            current:
+              type: integer
+            lastUpdated:
+              type: string
+              format: date-time
+        subscription:
+          type: object
+          properties:
+            plan:
+              type: string
+            renewalDate:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [active, expired, cancelled]
+
+    PurchaseCreditsRequest:
+      type: object
+      required:
+        - packageId
+        - paymentMethod
+      properties:
+        packageId:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [credit_card, paypal]
+        couponCode:
+          type: string
+          nullable: true
+
+    PurchaseCreditsResponse:
+      type: object
+      properties:
+        purchaseId:
+          type: string
+        creditsAdded:
+          type: integer
+        newCreditBalance:
+          type: integer
+
