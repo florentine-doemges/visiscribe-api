@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Video Transcription & Analysis API
   version: 1.0.0
-  description: API zum Hochladen, Analysieren und Durchsuchen von Videos, inklusive Nutzerverwaltung und Abrechnung.
+  description: API zum Hochladen (per URL), Analysieren und Durchsuchen von Videos, inklusive Nutzerverwaltung und Abrechnung.
 servers:
   - url: https://api.example.com/api/v1
     description: Produktionsserver
@@ -25,7 +25,7 @@ paths:
           description: Benutzer erfolgreich angelegt
         '400':
           description: Ungültige Eingabe (z.B. E-Mail-Format)
-  
+
   /auth/login:
     post:
       summary: Login für vorhandenen Benutzer
@@ -68,27 +68,32 @@ paths:
 
   /videos:
     post:
-      summary: Lädt ein Video hoch
-      operationId: uploadVideo
+      summary: Registriert ein neues Video anhand einer externen URL
+      operationId: createVideoByUrl
       security:
         - BearerAuth: []
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
               type: object
               properties:
-                file:
+                videoUrl:
                   type: string
-                  format: binary
+                  format: uri
+                  description: URL zum bereits gehosteten Video
                 title:
                   type: string
+                  description: Titel des Videos
                 description:
                   type: string
+                  description: Freitext-Beschreibung
+              required:
+                - videoUrl
       responses:
         '201':
-          description: Video erfolgreich hochgeladen
+          description: Video erfolgreich registriert
           content:
             application/json:
               schema:
@@ -479,6 +484,10 @@ components:
         status:
           type: string
           enum: [uploaded, processing, completed, failed]
+        videoUrl:
+          type: string
+          format: uri
+          nullable: true
         fileSize:
           type: integer
           nullable: true
@@ -660,4 +669,3 @@ components:
           type: integer
         newCreditBalance:
           type: integer
-
